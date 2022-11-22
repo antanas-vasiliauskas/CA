@@ -52,11 +52,29 @@ section .text
 
     mov ax, [decimal_sum]
     mov dx, decimal_sum_str
+    cmp ax, -1
+    jg NotNegative2
+    neg ax
+    mov byte [is_negative], 1
+    NotNegative2:
     call procInt16ToStr
 
     mov ax, [floating_sum]
     mov dx, floating_sum_str
-    call procUInt16ToStr
+    cmp ax, -1
+    jg NotNegative
+    neg ax
+    mov byte [is_negative], 1
+    NotNegative:
+    call procInt16ToStr
+    cmp ax, 10
+    jg SkipAddZero
+    mov al, [floating_sum_str]
+    mov byte [floating_sum_str], 0x30
+    mov [floating_sum_str+1], al
+    mov byte [floating_sum+2], 00
+    SkipAddZero:
+
 
     ; Create file
     mov cx, 0
@@ -66,6 +84,8 @@ section .text
 
     mov dx, output_filename
     call procFOpenForWriting
+
+
 
 
     mov dx, number_count_str
@@ -78,10 +98,25 @@ section .text
     mov byte [number_count_str+bx], 0x0A
     mov byte [number_count_str+bx+1], 0x0D
     inc bx
-    inc bx
     mov cx, bx
     pop bx
     call procFWrite
+
+
+
+    cmp byte [is_negative], 1
+    jnz OmitMinus
+    push ax
+    push cx
+    push dx
+    mov dx, minus
+    inc dx
+    mov cx, 1
+    call procFWrite
+    pop dx
+    pop cx
+    pop ax
+    OmitMinus:
 
     
 
@@ -92,9 +127,8 @@ section .text
     inc bx
     cmp byte [decimal_sum_str+bx], 00
     jnz number_of_bytes_loop2
-    mov byte [decimal_sum_str+bx], 0x0A
+    mov byte [decimal_sum_str+bx], '.'
     mov byte [decimal_sum_str+bx+1], 0x0D
-    inc bx
     inc bx
     mov cx, bx
     pop bx
@@ -107,10 +141,13 @@ section .text
     inc bx
     cmp byte [floating_sum_str+bx], 00
     jnz number_of_bytes_loop3
-    mov byte [floating_sum_str+bx], 0x0A
-    mov byte [floating_sum_str+bx+1], 0x0D
-    inc bx
-    inc bx
+    mov byte [floating_sum_str+bx], 00
+    cmp word [floating_sum], 10
+    jge MoreThanNine
+    cmp word [floating_sum], -10
+    jle MoreThanNine
+    dec bx
+    MoreThanNine:
     mov cx, bx
     pop bx
     call procFWrite
@@ -266,6 +303,8 @@ add_floating_number_in_line:
     inc bx
     cmp byte [buffer+bx], 0x0A
     jz OutLoop2
+    cmp byte [buffer+bx], 0x0D
+    jz OutLoop2
     cmp byte [buffer+bx], 0x3B
     jnz L1
     inc ah
@@ -285,14 +324,16 @@ add_floating_number_in_line:
     inc ch
     cmp al, 0
     jz L4
-    mov cl, [buffer+bx]
-    sub cl, 0x30
-    add [decimal_sum], cl
+    mov dl, [buffer+bx]
+    mov dh, 0
+    sub dx, 0x30
+    add [decimal_sum], dx
     jmp L5
     L4:
-    mov cl, [buffer+bx]
-    sub cl, 0x30
-    sub [decimal_sum], cl
+    mov dl, [buffer+bx]
+    mov dh, 0
+    sub dx, 0x30
+    sub [decimal_sum], dx
     L5:
     inc bx
     jmp Loop2
@@ -306,9 +347,10 @@ add_floating_number_in_line:
     push ax
     push dx
     mov al, [buffer+bx]
-    sub al, 0x30
+    mov ah, 0
+    sub ax, 0x30
     mov cl, 10
-    mul cl
+    imul cl
     add [floating_sum], ax
     pop dx
     pop ax
@@ -317,10 +359,11 @@ add_floating_number_in_line:
     L7:
     push ax
     push dx
-    mov al, [buffer+bx]
-    sub al, 0x30
+    mov ax, [buffer+bx]
+    mov ah, 0
+    sub ax, 0x30
     mov cl, 10
-    mul cl
+    imul cl
     sub [floating_sum], ax
     pop dx
     pop ax
@@ -330,14 +373,16 @@ add_floating_number_in_line:
     L6:
     cmp al, 0
     jz L10
-    mov cl, [buffer+bx]
-    sub cl, 0x30
-    add [floating_sum], cl
+    mov dl, [buffer+bx]
+    mov dh, 0
+    sub dx, 0x30
+    add [floating_sum], dx
     jmp OutLoop2
     L10:
-    mov cl, [buffer+bx]
-    sub cl, 0x30
-    sub [floating_sum], cl
+    mov dl, [buffer+bx]
+    mov dh, 0
+    sub dx, 0x30
+    sub [floating_sum], dx
     OutLoop2:
 
     pop dx
@@ -346,9 +391,9 @@ add_floating_number_in_line:
     pop ax
 
     cmp word [floating_sum], 99
-    jge L12
+    jg L12
     cmp word [floating_sum], -99
-    jge L13
+    jl L13
     ret
     L12:
     sub word [floating_sum], 100
@@ -358,8 +403,6 @@ add_floating_number_in_line:
     add word [floating_sum], 100
     dec word [decimal_sum]
     ret
-
-
 
     
 
@@ -390,5 +433,9 @@ section .data
         dw 0000
     floating_sum:
         dw 0000
+    minus:
+        times 256 db 0x2d
+    is_negative:
+        db 00
     
 section .bss
