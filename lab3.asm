@@ -14,6 +14,8 @@ section .text
       dw 0000
     tekstas:
       db  'Baigiame',0Dh, 0Ah, '$'
+    buffer_byte:
+      db 'a'
 
 
 ; Open input file                               // procFOpenForReading, I: ds:dx - ASCIIZ pavadinimas | O: bx - failo deskriptorius, jei CF == 0, CF = 1, jeigu klaida
@@ -72,43 +74,49 @@ Naujas_I88:
       mov [cs:output_handle], bx
 
       ;; Skaitom ir rasom i faila po viena simboli
-      StartLoop:
-      mov bx, input_handle
-            push ds
-            push cs
-            pop ds
-            push dx
-            mov cx, 1
-            mov dx, .baitas
-            mov ah, 0x3F
-            int 0x21
-            mov cl, [.baitas]
-            pop dx
-            .baitas:
-            db 00
-            pop ds
       push ds
       push cs
       pop ds
-   push dx
-   push ax
-   mov dl, cl
-   mov ah, 02
-   int 0x21
-   pop ax
-   pop dx
+            ReadWriteLoop:
+            mov bx, [cs:input_handle]
+            push dx
+            push cx
+            mov cx, 1
+            mov dx, buffer_byte
+            mov ah, 0x3F
+            int 0x21
+            pop cx
+            pop dx
+
+            cmp ax, 0000 ;; eof
+            jz EndLoop
+            cmp byte [cs:buffer_byte], 0x0A
+            jz EndLoop
+            cmp byte [cs:buffer_byte], 0x0D
+            jz EndLoop
+
+            ;push dx
+            ;push ax
+            ;mov dl, [cs:buffer_byte]
+            ;mov ah, 02
+            ;int 0x21
+            ;pop ax
+            ;pop dx
+
+            mov bx, [cs:output_handle]
+            push dx
+            push cx
+            mov cx, 1
+            mov dx, buffer_byte
+            mov ah, 0x40
+            int 0x21
+            pop cx
+            pop dx
+
+
+            jmp ReadWriteLoop
+            EndLoop:
       pop ds
-      cmp ax, 0000
-      jz EndLoop
-      cmp cl, 0x0A
-      jz EndLoop
-      cmp cl, 0x0D
-      jz EndLoop
-      mov al, cl
-      mov bx, output_handle
-      call procFPutChar
-      jmp StartLoop
-      EndLoop:
       ;;
 
       ; Uzdarome failus
@@ -130,27 +138,22 @@ Nustatymas:
         pop     ds
         mov     ax, 3588h                 ; gauname sena pertraukimo vektoriu
         int     21h
-        ;; Zr. http://helppc.netcore2k.net/interrupt/int-21-35
         
         ; Saugome sena vektoriu 
         mov     [cs:Senas_I88], bx             ; issaugome seno doroklio poslinki    
         mov     [cs:Senas_I88 + 2], es         ; issaugome seno doroklio segmenta
         
-        ; Nustatome nauja 1Ch (taimerio) vektoriu
-        ;lea     dx, [Naujas_I88]
+        ; Nustatome sena vektoriu 
         mov     dx,  Naujas_I88
         mov     ax, 2588h                 ; nustatome pertraukimo vektoriu
         int     21h
-        ;; Zr. http://helppc.netcore2k.net/interrupt/int-21-25
         
         macPutString "OK ...", crlf, '$'
         
         ;lea     dx, [Nustatymas  + 1]       ; dx - kiek baitu  
         mov dx, Nustatymas + 1
         int     27h                       ; Padarome rezidentu
-        ;; Zr. http://helppc.netcore2k.net/interrupt/int-27
 %include 'yasmlib.asm'        
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-section .bss                    ; neinicializuoti duomenys  
+section .bss                    
 
 
